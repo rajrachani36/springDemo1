@@ -1,0 +1,65 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up JDK 21
+      uses: actions/setup-java@v3
+      with:
+        java-version: '21'
+        distribution: 'adopt'
+
+    - name: Install Maven
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y maven
+
+    - name: Build with Maven
+      run: mvn clean install
+
+    - name: Run the application
+      run: mvn spring-boot:run &
+
+    - name: Install ngrok
+      run: |
+        curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | tee /etc/apt/trusted.gpg.d/ngrok.asc
+        echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | tee /etc/apt/sources.list.d/ngrok.list
+        apt update && apt install ngrok
+
+    - name: Expose Spring Boot App via ngrok
+      run: |
+        ngrok http 8080 &
+        sleep 10
+        curl -s localhost:4040/api/tunnels | jq -r '.tunnels[0].public_url'
+
+    - name: Verify Spring Boot App Status
+      run: |
+        curl -I http://localhost:8080 || echo "Spring Boot app is not responding on localhost:8080"
+
+    - name: Fetch IP Address
+      run: |
+        RUNNER_IP=$(ip -o -f inet addr show ens5 | awk '{print $4}' | cut -d/ -f1)
+        echo "Runner IP Address: $RUNNER_IP"
+        echo "RUNNER_IP=${RUNNER_IP}" >> $GITHUB_ENV
+        echo "FILE_PATH=${{ github.workspace }}/burp_config.yml" >> $GITHUB_ENV
+        echo $RUNNER_IP
+
+    - name: Run long-running process
+      run: |
+        while true; do
+          echo "Running..."
+          sleep 60
+        done
